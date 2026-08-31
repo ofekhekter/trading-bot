@@ -12,25 +12,40 @@ class NewsTestApp(EWrapper, EClient):
     def __init__(self):
         EClient.__init__(self, self)
 
+        self.symbol = None
         self.con_id = None
         self.contract_finished = False
         self.news_finished = False
+
         self.headlines = []
         self.seen_headlines = set()
-        self.news_cutoff = datetime.utcnow() - timedelta(hours=96)
+
+        self.news_cutoff = (
+            datetime.utcnow()
+            - timedelta(hours=96)
+        )
 
     def nextValidId(self, orderId):
         print("Connected to IBKR.")
 
-    def contractDetails(self, reqId, contractDetails):
-        self.con_id = contractDetails.contract.conId
+    def contractDetails(
+        self,
+        reqId,
+        contractDetails
+    ):
+        self.con_id = (
+            contractDetails.contract.conId
+        )
 
         print(
-            f"NVDA contract found | "
+            f"{self.symbol} contract found | "
             f"conId={self.con_id}"
         )
 
-    def contractDetailsEnd(self, reqId):
+    def contractDetailsEnd(
+        self,
+        reqId
+    ):
         self.contract_finished = True
 
     def historicalNews(
@@ -46,25 +61,38 @@ class NewsTestApp(EWrapper, EClient):
                 time,
                 "%Y-%m-%d %H:%M:%S.%f"
             )
+
         except ValueError:
-            print(f"Could not parse news time: {time}")
+            print(
+                f"Could not parse news time: "
+                f"{time}"
+            )
             return
 
         if news_time < self.news_cutoff:
             return
-        clean_key = headline.strip().lower()
+
+        clean_key = (
+            headline
+            .strip()
+            .lower()
+        )
 
         if clean_key in self.seen_headlines:
             return
 
-        self.seen_headlines.add(clean_key)
+        self.seen_headlines.add(
+            clean_key
+        )
 
-        self.headlines.append({
-            "time": time,
-            "provider": providerCode,
-            "article_id": articleId,
-            "headline": headline
-        })
+        self.headlines.append(
+            {
+                "time": time,
+                "provider": providerCode,
+                "article_id": articleId,
+                "headline": headline
+            }
+        )
 
     def historicalNewsEnd(
         self,
@@ -86,7 +114,11 @@ class NewsTestApp(EWrapper, EClient):
         errorString,
         advancedOrderRejectJson=""
     ):
-        if errorCode in [2104, 2106, 2158]:
+        if errorCode in [
+            2104,
+            2106,
+            2158
+        ]:
             return
 
         print(
@@ -101,19 +133,28 @@ def run_loop(app):
     app.run()
 
 
-def create_stock_contract(symbol):
+def create_stock_contract(
+    symbol
+):
     contract = Contract()
-    contract.symbol = symbol
+
+    contract.symbol = symbol.upper()
     contract.secType = "STK"
     contract.exchange = "SMART"
     contract.currency = "USD"
 
     return contract
+
+
 def get_recent_news(
     symbol: str,
-    providers: str = "BRFG+BRFUPDN+DJNL"
+    providers: str = (
+        "BRFG+BRFUPDN+DJNL"
+    )
 ):
     app = NewsTestApp()
+
+    app.symbol = symbol.upper()
 
     app.connect(
         "127.0.0.1",
@@ -131,16 +172,22 @@ def get_recent_news(
 
     time.sleep(2)
 
-    contract = create_stock_contract(symbol)
+    contract = create_stock_contract(
+        symbol
+    )
 
     app.reqContractDetails(
         10,
         contract
     )
 
-    timeout = time.time() + 10
+    timeout = (
+        time.time()
+        + 10
+    )
 
     while not app.contract_finished:
+
         if time.time() > timeout:
             app.disconnect()
             return []
@@ -152,7 +199,11 @@ def get_recent_news(
         return []
 
     end = datetime.utcnow()
-    start = end - timedelta(hours=96)
+
+    start = (
+        end
+        - timedelta(hours=96)
+    )
 
     end_time = end.strftime(
         "%Y%m%d-%H:%M:%S"
@@ -172,25 +223,38 @@ def get_recent_news(
         []
     )
 
-    timeout = time.time() + 15
+    timeout = (
+        time.time()
+        + 15
+    )
 
     while not app.news_finished:
+
         if time.time() > timeout:
             break
 
         time.sleep(0.2)
 
-    headlines = app.headlines.copy()
+    headlines = (
+        app.headlines.copy()
+    )
 
     app.disconnect()
 
     return headlines
 
+
 if __name__ == "__main__":
+
+    TEST_SYMBOL = "NVDA"
 
     app = NewsTestApp()
 
-    print("Connecting to TWS Paper...")
+    app.symbol = TEST_SYMBOL
+
+    print(
+        "Connecting to TWS Paper..."
+    )
 
     app.connect(
         "127.0.0.1",
@@ -208,44 +272,59 @@ if __name__ == "__main__":
 
     time.sleep(2)
 
-    # --------------------------------
-    # Find NVDA conId
-    # --------------------------------
+    print(
+        f"\nFinding "
+        f"{TEST_SYMBOL} contract..."
+    )
 
-    print("\nFinding NVDA contract...")
-
-    contract = create_stock_contract("NVDA")
+    contract = (
+        create_stock_contract(
+            TEST_SYMBOL
+        )
+    )
 
     app.reqContractDetails(
         10,
         contract
     )
 
-    timeout = time.time() + 10
+    timeout = (
+        time.time()
+        + 10
+    )
 
     while not app.contract_finished:
 
         if time.time() > timeout:
-            print("Timed out finding NVDA contract.")
+
+            print(
+                f"Timed out finding "
+                f"{TEST_SYMBOL} contract."
+            )
+
             app.disconnect()
+
             raise SystemExit
 
         time.sleep(0.2)
 
-
     if app.con_id is None:
-        print("Could not find NVDA conId.")
+
+        print(
+            f"Could not find "
+            f"{TEST_SYMBOL} conId."
+        )
+
         app.disconnect()
+
         raise SystemExit
-
-
-    # --------------------------------
-    # Request real NVDA news
-    # --------------------------------
 
     end = datetime.utcnow()
 
-    start = end - timedelta(days=7)
+    start = (
+        end
+        - timedelta(days=7)
+    )
 
     end_time = end.strftime(
         "%Y%m%d-%H:%M:%S"
@@ -255,9 +334,14 @@ if __name__ == "__main__":
         "%Y%m%d-%H:%M:%S"
     )
 
-    providers = "BRFG+BRFUPDN+DJNL"
+    providers = (
+        "BRFG+BRFUPDN+DJNL"
+    )
 
-    print("\nRequesting REAL NVDA news...")
+    print(
+        f"\nRequesting REAL "
+        f"{TEST_SYMBOL} news..."
+    )
 
     app.reqHistoricalNews(
         20,
@@ -269,34 +353,41 @@ if __name__ == "__main__":
         []
     )
 
-    timeout = time.time() + 15
+    timeout = (
+        time.time()
+        + 15
+    )
 
     while not app.news_finished:
 
         if time.time() > timeout:
-            print("Timed out waiting for news.")
+
+            print(
+                "Timed out waiting "
+                "for news."
+            )
+
             break
 
         time.sleep(0.2)
 
-
-    # --------------------------------
-    # Print results
-    # --------------------------------
-
     print(
-        f"\n--- REAL NVDA NEWS "
-        f"({len(app.headlines)} articles) ---"
+        f"\n--- REAL "
+        f"{TEST_SYMBOL} NEWS "
+        f"({len(app.headlines)} "
+        f"articles) ---"
     )
 
     for article in app.headlines:
 
         print(
-            f"\n[{article['provider']}] "
+            f"\n"
+            f"[{article['provider']}] "
             f"{article['time']}"
         )
 
-        print(article["headline"])
-
+        print(
+            article["headline"]
+        )
 
     app.disconnect()
