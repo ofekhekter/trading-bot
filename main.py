@@ -5,12 +5,18 @@ from technical_analysis import TechnicalAnalyzer
 from news_analyzer import NewsAnalyzer
 from ib_market_data import get_historical_bars
 from ib_news_test import get_recent_news
+import threading
+import time
+
+from ib_connection import IBConnection, run_loop
+from order_executor import OrderExecutor
 
 BOT_NAME = "IBKR Trading Bot"
 
 MAX_CAPITAL_USD = 6000.00
 MAX_POSITION_USD = 2000.00
-LIVE_TRADING = False
+PAPER_EXECUTION_ENABLED = False
+TRADE_AMOUNT_USD = 1000.00
 
 risk = RiskManager(
     max_capital=MAX_CAPITAL_USD,
@@ -27,38 +33,16 @@ print("=" * 45)
 print(f"Started: {datetime.now()}")
 print(f"Maximum capital: ${MAX_CAPITAL_USD:,.2f}")
 print(f"Maximum position: ${MAX_POSITION_USD:,.2f}")
-print(f"Live trading: {LIVE_TRADING}")
+print(f"Paper execution enabled: {PAPER_EXECUTION_ENABLED}")
 
-if LIVE_TRADING:
-    print("WARNING: LIVE TRADING ENABLED")
+if PAPER_EXECUTION_ENABLED:
+    print("IBKR PAPER ORDER EXECUTION ENABLED")
 else:
-    print("SAFE MODE: PAPER TRADING ONLY")
+    print("DRY RUN MODE - NO ORDERS WILL BE SENT")
 
 print("\n--- MULTIPLE TRADES RISK TEST ---")
 
-trades = [
-    ("NVDA", 1800.00),
-    ("AMD", 1500.00),
-    ("AVGO", 1900.00),
-    ("PLTR", 1200.00),
-]
 
-for symbol, amount in trades:
-    print(f"\n{symbol}: requesting ${amount:,.2f}")
-
-    approved, reason = risk.can_open_position(amount)
-    print(reason)
-
-    if approved:
-        risk.register_position(amount)
-        print(f"{symbol}: APPROVED")
-    else:
-        print(f"{symbol}: BLOCKED")
-
-    print(
-        f"Capital: ${risk.used_capital:,.2f} "
-        f"/ ${MAX_CAPITAL_USD:,.2f}"
-    )
 
 print("\n--- TECHNICAL ANALYSIS TEST ---")
 
@@ -199,3 +183,115 @@ print(
 )
 
 print(f"Final score: {result['final_score']}")
+
+print("\n--- TRADE EXECUTION PLAN ---")
+
+entry_action = result["entry_action"]
+
+if entry_action not in ("ENTER_LONG", "ENTER_SHORT"):
+    print(f"No trade will be opened.")
+    print(f"Entry action: {entry_action}")
+    raise SystemExit
+
+trade_direction = (
+    "LONG"
+    if entry_action == "ENTER_LONG"
+    else "SHORT"
+)
+
+current_price = technical_result["current_price"]
+
+trade_plan = risk.calculate_trade_plan(
+    action=trade_direction,
+    price=current_price,
+    trade_amount=TRADE_AMOUNT_USD,
+)
+
+if not trade_plan["approved"]:
+    print("TRADE BLOCKED BY RISK MANAGER")
+    print(trade_plan["reason"])
+    raise SystemExit
+
+print(f"Direction: {trade_direction}")
+print(f"Order action: {trade_plan['order_action']}")
+print(f"Quantity: {trade_plan['quantity']}")
+print(f"Estimated entry: ${trade_plan['entry_price']}")
+print(f"Position value: ${trade_plan['position_value']}")
+print(f"Stop Loss: ${trade_plan['stop_price']}")
+print(f"Take Profit: ${trade_plan['take_profit_price']}")
+
+if not PAPER_EXECUTION_ENABLED:
+    print("\nDRY RUN COMPLETE.")
+    print("NO ORDER WAS SENT TO IBKR.")
+    raise SystemExit
+
+
+print("\n--- CONNECTING FOR PAPER EXECUTION ---")
+
+ib_app = IBConnection()
+
+ib_app.connect(
+    "127.0.0.1",
+    7497,
+    clientId=10,
+)
+
+api_thread = threading.Thread(
+    target=run_loop,
+    args=(ib_app,),
+    daemon=True,
+)
+
+api_thread.start()
+
+timeout = 10
+start_time = time.time()
+
+while (
+    not ib_app.connected_successfully
+    and time.time() - start_time < timeout
+):
+    time.sleep(0.1)
+
+if not ib_app.connected_successfully:
+    print("ORDER BLOCKED: Could not connect to IBKR.")
+    ib_app.disconnect()
+    raise SystemExit
+
+start_time = time.time()
+
+while (
+    not ib_app.managed_accounts
+    and time.time() - start_time < timeout
+):
+    time.sleep(0.1)
+
+if not ib_app.managed_accounts:
+    print("ORDER BLOCKED: No IBKR account detected.")
+    ib_app.disconnect()
+    raise SystemExit
+
+account = ib_app.managed_accounts[0]
+
+if not account.upper().startswith("DU"):
+    print("ORDER BLOCKED: ACCOUNT IS NOT PAPER.")
+    ib_app.disconnect()
+    raise SystemExit
+
+print("PAPER ACCOUNT VERIFIED.")
+
+executor = OrderExecutor(ib_app)
+
+executor.place_bracket_order(
+    symbol=result["symbol"],
+    action=trade_plan["order_action"],
+    quantity=trade_plan["quantity"],
+    stop_price=trade_plan["stop_price"],
+    take_profit_price=trade_plan["take_profit_price"],
+)
+
+time.sleep(5)
+
+ib_app.disconnect()
+
+print("\nPAPER ORDER PROCESS FINISHED.")
