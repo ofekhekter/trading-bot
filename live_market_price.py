@@ -53,43 +53,33 @@ class LivePriceApp(EWrapper, EClient):
         if price <= 0:
             return
 
-        # IBKR Tick Types:
+        # Live:
         # 1 = BID
         # 2 = ASK
         # 4 = LAST
         # 9 = CLOSE
+        #
+        # Delayed:
+        # 66 = DELAYED BID
+        # 67 = DELAYED ASK
+        # 68 = DELAYED LAST
+        # 75 = DELAYED CLOSE
 
-        if tickType == 1:
+        if tickType in (1, 66):
             self.bid = float(price)
+            print(f"BID: ${self.bid:.2f}")
 
-            print(
-                f"BID: "
-                f"${self.bid:.2f}"
-            )
-
-        elif tickType == 2:
+        elif tickType in (2, 67):
             self.ask = float(price)
+            print(f"ASK: ${self.ask:.2f}")
 
-            print(
-                f"ASK: "
-                f"${self.ask:.2f}"
-            )
-
-        elif tickType == 4:
+        elif tickType in (4, 68):
             self.last = float(price)
+            print(f"LAST: ${self.last:.2f}")
 
-            print(
-                f"LAST: "
-                f"${self.last:.2f}"
-            )
-
-        elif tickType == 9:
+        elif tickType in (9, 75):
             self.close = float(price)
-
-            print(
-                f"CLOSE: "
-                f"${self.close:.2f}"
-            )
+            print(f"CLOSE: ${self.close:.2f}")
 
     def error(
         self,
@@ -122,31 +112,20 @@ def run_loop(app):
     app.run()
 
 
-def create_stock_contract(
-    symbol
-):
+def create_stock_contract(symbol):
     contract = Contract()
-
     contract.symbol = symbol.upper()
     contract.secType = "STK"
     contract.exchange = "SMART"
     contract.currency = "USD"
-
     return contract
 
 
 print("=" * 60)
-print("IBKR LIVE MARKET PRICE TEST")
+print("IBKR DELAYED MARKET PRICE TEST")
 print("=" * 60)
-
-print(
-    f"Symbol: {TARGET_SYMBOL}"
-)
-
-print(
-    "READ-ONLY TEST - "
-    "NO ORDERS WILL BE SENT."
-)
+print(f"Symbol: {TARGET_SYMBOL}")
+print("READ-ONLY TEST - NO ORDERS WILL BE SENT.")
 
 app = LivePriceApp()
 
@@ -164,52 +143,23 @@ api_thread = threading.Thread(
 
 api_thread.start()
 
-
-# =====================================
 # WAIT FOR API CONNECTION
-# =====================================
-
 timeout = time.time() + 10
 
 while not app.connected_successfully:
-
     if time.time() > timeout:
-
-        print(
-            "FAILED: Could not connect "
-            "to IBKR."
-        )
-
+        print("FAILED: Could not connect to IBKR.")
         app.disconnect()
         raise SystemExit
 
     time.sleep(0.1)
 
+contract = create_stock_contract(TARGET_SYMBOL)
 
-contract = create_stock_contract(
-    TARGET_SYMBOL
-)
+# REQUEST DELAYED MARKET DATA
+app.reqMarketDataType(3)
 
-
-# =====================================
-# REQUEST MARKET DATA
-# =====================================
-#
-# 1 = Live
-# 2 = Frozen
-# 3 = Delayed
-# 4 = Delayed Frozen
-#
-# We first request LIVE.
-# IBKR may return a different data type
-# depending on the account subscriptions.
-# =====================================
-
-app.reqMarketDataType(1)
-
-print(
-    "\nRequesting market data..."
-)
+print("\nRequesting market data...")
 
 app.reqMktData(
     100,
@@ -220,15 +170,10 @@ app.reqMktData(
     [],
 )
 
-
-# =====================================
 # WAIT FOR PRICE
-# =====================================
-
 timeout = time.time() + 10
 
 while time.time() < timeout:
-
     if (
         app.last is not None
         or (
@@ -240,11 +185,7 @@ while time.time() < timeout:
 
     time.sleep(0.1)
 
-
-# =====================================
 # SELECT BEST CURRENT PRICE
-# =====================================
-
 print("\n" + "=" * 60)
 print("MARKET PRICE RESULT")
 print("=" * 60)
@@ -253,7 +194,6 @@ current_price = None
 source = None
 
 if app.last is not None:
-
     current_price = app.last
     source = "LAST"
 
@@ -261,73 +201,34 @@ elif (
     app.bid is not None
     and app.ask is not None
 ):
-
     current_price = (
         app.bid + app.ask
     ) / 2
-
     source = "MID"
 
 elif app.bid is not None:
-
     current_price = app.bid
     source = "BID"
 
 elif app.ask is not None:
-
     current_price = app.ask
     source = "ASK"
 
 elif app.close is not None:
-
     current_price = app.close
     source = "CLOSE"
 
-
 if current_price is None:
-
-    print(
-        "No usable market price "
-        "was received."
-    )
+    print("No usable market price was received.")
 
 else:
-
-    print(
-        f"Bid: "
-        f"{app.bid}"
-    )
-
-    print(
-        f"Ask: "
-        f"{app.ask}"
-    )
-
-    print(
-        f"Last: "
-        f"{app.last}"
-    )
-
-    print(
-        f"Close: "
-        f"{app.close}"
-    )
-
-    print(
-        f"Selected price: "
-        f"${current_price:.2f}"
-    )
-
-    print(
-        f"Price source: "
-        f"{source}"
-    )
-
-    print(
-        f"Market data type: "
-        f"{app.market_data_type}"
-    )
-
+    print(f"Bid: {app.bid}")
+    print(f"Ask: {app.ask}")
+    print(f"Last: {app.last}")
+    print(f"Close: {app.close}")
+    print(f"Selected price: ${current_price:.2f}")
+    print(f"Price source: {source}")
+    print(f"Market data type: {app.market_data_type}")
 
 app.cancelMktData(100)
 
@@ -335,6 +236,4 @@ time.sleep(0.5)
 
 app.disconnect()
 
-print(
-    "\nLIVE MARKET PRICE TEST FINISHED."
-)
+print("\nDELAYED MARKET PRICE TEST FINISHED.")
