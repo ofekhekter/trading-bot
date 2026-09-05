@@ -10,11 +10,21 @@ class PositionManager:
         trailing_distance_percent=0.8,
     ):
         self.initial_stop_percent = initial_stop_percent
-        self.break_even_trigger_percent = break_even_trigger_percent
-        self.profit_lock_trigger_percent = profit_lock_trigger_percent
-        self.profit_lock_percent = profit_lock_percent
-        self.trailing_trigger_percent = trailing_trigger_percent
-        self.trailing_distance_percent = trailing_distance_percent
+        self.break_even_trigger_percent = (
+            break_even_trigger_percent
+        )
+        self.profit_lock_trigger_percent = (
+            profit_lock_trigger_percent
+        )
+        self.profit_lock_percent = (
+            profit_lock_percent
+        )
+        self.trailing_trigger_percent = (
+            trailing_trigger_percent
+        )
+        self.trailing_distance_percent = (
+            trailing_distance_percent
+        )
 
     def calculate_stop(
         self,
@@ -27,7 +37,10 @@ class PositionManager:
     ):
         side = side.upper()
 
-        if side not in ("LONG", "SHORT"):
+        if side not in (
+            "LONG",
+            "SHORT",
+        ):
             raise ValueError(
                 "side must be LONG or SHORT"
             )
@@ -72,7 +85,12 @@ class PositionManager:
             current_price,
         )
 
-        move_percent = (
+        current_move_percent = (
+            (current_price - entry_price)
+            / entry_price
+        ) * 100
+
+        favorable_move_percent = (
             (highest_price - entry_price)
             / entry_price
         ) * 100
@@ -86,24 +104,25 @@ class PositionManager:
         stage = "INITIAL_STOP"
 
         if (
-            move_percent
+            favorable_move_percent
             >= self.break_even_trigger_percent
         ):
             suggested_stop = entry_price
             stage = "BREAK_EVEN"
 
         if (
-            move_percent
+            favorable_move_percent
             >= self.profit_lock_trigger_percent
         ):
             suggested_stop = entry_price * (
                 1
                 + self.profit_lock_percent / 100
             )
+
             stage = "PROFIT_LOCK"
 
         if (
-            move_percent
+            favorable_move_percent
             >= self.trailing_trigger_percent
         ):
             trailing_stop = highest_price * (
@@ -128,27 +147,34 @@ class PositionManager:
             "side": "LONG",
             "entry_price": round(
                 entry_price,
-                2
+                2,
             ),
             "current_price": round(
                 current_price,
-                2
+                2,
             ),
             "highest_price": round(
                 highest_price,
-                2
+                2,
             ),
-            "move_percent": round(
-                move_percent,
-                3
+            "current_move_percent": round(
+                current_move_percent,
+                3,
+            ),
+            "favorable_move_percent": round(
+                favorable_move_percent,
+                3,
             ),
             "stage": stage,
             "suggested_stop": round(
                 suggested_stop,
-                2
+                2,
             ),
             "current_stop": (
-                round(current_stop, 2)
+                round(
+                    current_stop,
+                    2,
+                )
                 if current_stop is not None
                 else None
             ),
@@ -169,7 +195,12 @@ class PositionManager:
             current_price,
         )
 
-        move_percent = (
+        current_move_percent = (
+            (entry_price - current_price)
+            / entry_price
+        ) * 100
+
+        favorable_move_percent = (
             (entry_price - lowest_price)
             / entry_price
         ) * 100
@@ -183,24 +214,25 @@ class PositionManager:
         stage = "INITIAL_STOP"
 
         if (
-            move_percent
+            favorable_move_percent
             >= self.break_even_trigger_percent
         ):
             suggested_stop = entry_price
             stage = "BREAK_EVEN"
 
         if (
-            move_percent
+            favorable_move_percent
             >= self.profit_lock_trigger_percent
         ):
             suggested_stop = entry_price * (
                 1
                 - self.profit_lock_percent / 100
             )
+
             stage = "PROFIT_LOCK"
 
         if (
-            move_percent
+            favorable_move_percent
             >= self.trailing_trigger_percent
         ):
             trailing_stop = lowest_price * (
@@ -225,27 +257,34 @@ class PositionManager:
             "side": "SHORT",
             "entry_price": round(
                 entry_price,
-                2
+                2,
             ),
             "current_price": round(
                 current_price,
-                2
+                2,
             ),
             "lowest_price": round(
                 lowest_price,
-                2
+                2,
             ),
-            "move_percent": round(
-                move_percent,
-                3
+            "current_move_percent": round(
+                current_move_percent,
+                3,
+            ),
+            "favorable_move_percent": round(
+                favorable_move_percent,
+                3,
             ),
             "stage": stage,
             "suggested_stop": round(
                 suggested_stop,
-                2
+                2,
             ),
             "current_stop": (
-                round(current_stop, 2)
+                round(
+                    current_stop,
+                    2,
+                )
                 if current_stop is not None
                 else None
             ),
@@ -256,6 +295,10 @@ if __name__ == "__main__":
 
     manager = PositionManager()
 
+    print("=" * 60)
+    print("POSITION MANAGER LONG TEST")
+    print("=" * 60)
+
     entry = 315.86
 
     test_prices = [
@@ -264,14 +307,11 @@ if __name__ == "__main__":
         318.50,
         320.00,
         323.00,
+        319.00,
     ]
 
     highest = entry
     current_stop = 312.70
-
-    print("=" * 60)
-    print("POSITION MANAGER DRY RUN")
-    print("=" * 60)
 
     for price in test_prices:
 
@@ -294,12 +334,64 @@ if __name__ == "__main__":
 
         print(
             f"Price={price:.2f} | "
-            f"Move={result['move_percent']:.3f}% | "
+            f"Current={result['current_move_percent']:.3f}% | "
+            f"Favorable={result['favorable_move_percent']:.3f}% | "
             f"Stage={result['stage']} | "
             f"Stop={new_stop:.2f}"
         )
 
         current_stop = max(
+            current_stop,
+            new_stop,
+        )
+
+    print()
+    print("=" * 60)
+    print("POSITION MANAGER SHORT TEST")
+    print("=" * 60)
+
+    entry = 315.86
+
+    test_prices = [
+        315.86,
+        314.00,
+        312.50,
+        310.00,
+        307.00,
+        311.00,
+    ]
+
+    lowest = entry
+    current_stop = 319.02
+
+    for price in test_prices:
+
+        lowest = min(
+            lowest,
+            price,
+        )
+
+        result = manager.calculate_stop(
+            side="SHORT",
+            entry_price=entry,
+            current_price=price,
+            lowest_price=lowest,
+            current_stop=current_stop,
+        )
+
+        new_stop = (
+            result["suggested_stop"]
+        )
+
+        print(
+            f"Price={price:.2f} | "
+            f"Current={result['current_move_percent']:.3f}% | "
+            f"Favorable={result['favorable_move_percent']:.3f}% | "
+            f"Stage={result['stage']} | "
+            f"Stop={new_stop:.2f}"
+        )
+
+        current_stop = min(
             current_stop,
             new_stop,
         )

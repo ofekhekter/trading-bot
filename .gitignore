@@ -17,4 +17,6 @@ __pycache__/
 
 # OS
 .DS_Store
-Thumbs.db
+Thumbs.dbposition_state.json
+position_state.json
+
